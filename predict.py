@@ -7,6 +7,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 import torch
+from sklearn.preprocessing import MinMaxScaler
+import joblib
 from binance.client import Client
 
 from network import *
@@ -21,7 +23,7 @@ if __name__ == "__main__":
 
 	client = Client(opt.key, opt.secret)
 
-	input_seq_length = 10
+	input_seq_length = 50
 	output_seq_length = 1
 	batch_size = input_seq_length + output_seq_length
 
@@ -30,32 +32,40 @@ if __name__ == "__main__":
 	model.load_state_dict(torch.load(f"./model/crypto_predictor_{opt.symbol}.ckpt"))
 	model.eval()
 
-	last_minute = None
+	last_hour = None
 	matplotlib.use("TkAgg")
 	plt.ion()
 	fig = None
 	ax = None
 	while True:
 		now = dt.datetime.now()
-		if last_minute != now.minute:
-			if last_minute is not None:
+		if last_hour != now.hour:
+			if last_hour is not None:
 				time.sleep(5)
 
 			if fig is not None:
 				plt.close(fig)
 
-			data = client.get_historical_klines(opt.symbol, Client.KLINE_INTERVAL_1MINUTE, f"{input_seq_length + 1} minutes ago UTC")[:input_seq_length]
-			if len(data) != 10:
+			data = client.get_historical_klines(opt.symbol, Client.KLINE_INTERVAL_1HOUR, f"{input_seq_length + 1} hours ago UTC")[:input_seq_length]
+			if len(data) != input_seq_length:
 				continue
 
 			candles = pd.DataFrame(data, columns=["date_open", "open", "high", "low", "close", "volume", "date_close", "volume_asset", "trades", "volume_asset_buy", "volume_asset_sell", "ignore"])
+			times = candles["date_open"]
+			candles.drop(["date_open", "volume", "date_close", "volume_asset", "trades", "volume_asset_buy", "volume_asset_sell", "ignore"], axis=1, inplace=True)
+
+			sc = joblib.load(f"./model/crypto_predictor_{opt.symbol}.sc")
+			
+			candles_eval = sc.transform(candles)
+			candles["date_open"] = times
 
 			with torch.no_grad():
-				input_data = prepare_for_nn_eval(candles).to(device)
+				input_data = prepare_for_nn_eval(candles_eval).to(device)
 
-				output_pred = model(input_data)[0]
+				output_pred = model(input_data).cpu().numpy()
+				output_pred = sc.inverse_transform(output_pred)[0]
 
-				candles = candles.append({"date_open": candles["date_open"].iloc[-1] + 60000, "open": output_pred[0].item(), "close": output_pred[1].item(), "high": output_pred[2].item(), "low": output_pred[3].item()}, ignore_index=True)
+				candles = candles.append({"date_open": candles["date_open"].iloc[-1] + 3600000, "open": output_pred[0], "close": output_pred[1], "high": output_pred[2], "low": output_pred[3]}, ignore_index=True)
 
 			candles["date_open"] = pd.to_datetime(candles["date_open"], unit="ms")
 			candles["open"] = candles["open"].astype(float)
@@ -68,7 +78,7 @@ if __name__ == "__main__":
 			fig, ax = mpf.plot(candles, type="candle", block=False, returnfig=True)
 			fig.show()
 
-			last_minute = now.minute
+			last_hour = now.hour
 		else:
 			if fig is not None:
 				fig.canvas.draw()

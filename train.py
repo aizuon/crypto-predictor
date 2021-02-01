@@ -5,6 +5,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import DataLoader
+from sklearn.preprocessing import MinMaxScaler
+import joblib
 from binance.client import Client
 
 from network import *
@@ -23,17 +25,20 @@ if __name__ == "__main__":
 	model = SequencePredictor().to(device)
 	model.train()
 	loss_fn = nn.MSELoss(reduction="mean")
-	optimizer = torch.optim.Adam(model.parameters(), lr=1e-6)
+	optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
 
 	count = 100
-	input_seq_length = 10
-	output_seq_length = 1
-	batch_size = input_seq_length + output_seq_length
+	input_seq_length = 50
 
-	data = client.get_historical_klines(opt.symbol, Client.KLINE_INTERVAL_1MINUTE, f"{(count * batch_size) + 1} minutes ago UTC")
+	data = client.get_historical_klines(opt.symbol, Client.KLINE_INTERVAL_1HOUR, f"{((count + 1) * (input_seq_length + 1))} hours ago UTC")
 	candles = pd.DataFrame(data, columns=["date_open", "open", "high", "low", "close", "volume", "date_close", "volume_asset", "trades", "volume_asset_buy", "volume_asset_sell", "ignore"])
+	candles.drop(["date_open", "volume", "date_close", "volume_asset", "trades", "volume_asset_buy", "volume_asset_sell", "ignore"], axis=1, inplace=True)
 
-	input_data, output_data = split_df_to_input_output_train(candles, count, batch_size, input_seq_length, output_seq_length)
+	sc = MinMaxScaler(feature_range=(0, 1))
+	candles = sc.fit_transform(candles)
+	joblib.dump(sc, f"./model/crypto_predictor_{opt.symbol}.sc")
+
+	input_data, output_data = split_input_output_train(candles, count, input_seq_length)
 
 	dataset = SequenceDataset(input_data, output_data)
 	dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
@@ -54,17 +59,17 @@ if __name__ == "__main__":
 			inputs = inputs.to(device)
 			outputs = outputs.to(device)
 
-			outputs_pred = model(inputs)[0]
+			outputs_pred = model(inputs)
 			loss = loss_fn(outputs_pred, outputs)
 
 			optimizer.zero_grad()
 			loss.backward()
 			optimizer.step()
 
-			epoch_loss = loss.item()
+			epoch_loss = iterative_avg(epoch_loss, loss.item(), i + 1)
 
 			if (i + 1) % (total_step // 10) == 0:
-				print("Epoch [{}/{}], Step [{}/{}], Loss: {:.2f}".format(epoch + 1, num_epochs, i + 1, total_step, epoch_loss))
+				print(f"Epoch [{epoch + 1}/{num_epochs}], Step [{i + 1}/{total_step}], Loss: {epoch_loss:.2f}")
 
 		loss_hl.set_xdata(np.append(loss_hl.get_xdata(), epoch + 1))
 		loss_hl.set_ydata(np.append(loss_hl.get_ydata(), epoch_loss))
