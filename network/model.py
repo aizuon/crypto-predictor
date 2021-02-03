@@ -8,19 +8,20 @@ class SequencePredictor(nn.Module):
 	def __init__(self):
 		super().__init__()
 
-		in_params = 4
-		out_params = 4
+		in_params = 3
+		out_params = 3
 
-		hidden_layer_size = 100
-		layer_count = 2
+		lstm_hidden_layer_size = 128
+		lst_hidden_layer_count = 2
 
-		self.__lstm = nn.LSTM(input_size=in_params, hidden_size=hidden_layer_size, num_layers=layer_count, dropout=0.1, batch_first=True)
-		self.__fc = nn.Linear(hidden_layer_size, out_params)
+		self.__lstm = nn.LSTM(input_size=in_params, hidden_size=lstm_hidden_layer_size, num_layers=lst_hidden_layer_count, dropout=0.2, batch_first=True)
+		self.__fc = nn.Linear(lstm_hidden_layer_size, out_params)
 
 	def forward(self, x):
 		out, h = self.__lstm(x)
-
-		out = self.__fc(out[:, -1, :])
+		out = out[:, -1, :]
+		
+		out = self.__fc(out)
 
 		return out
 

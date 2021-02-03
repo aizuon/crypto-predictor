@@ -1,4 +1,5 @@
 import argparse
+import math
 
 import pandas as pd
 import matplotlib
@@ -24,17 +25,17 @@ if __name__ == "__main__":
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	model = SequencePredictor().to(device)
 	model.train()
-	loss_fn = nn.MSELoss(reduction="mean")
-	optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+	loss_fn = nn.MSELoss(reduction="sum")
+	optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
-	count = 100
-	input_seq_length = 50
+	count = 300
+	input_seq_length = 10
 
 	data = client.get_historical_klines(opt.symbol, Client.KLINE_INTERVAL_1HOUR, f"{((count + 1) * (input_seq_length + 1))} hours ago UTC")
 	candles = pd.DataFrame(data, columns=["date_open", "open", "high", "low", "close", "volume", "date_close", "volume_asset", "trades", "volume_asset_buy", "volume_asset_sell", "ignore"])
-	candles.drop(["date_open", "volume", "date_close", "volume_asset", "trades", "volume_asset_buy", "volume_asset_sell", "ignore"], axis=1, inplace=True)
+	candles.drop(["date_open", "open", "volume", "date_close", "volume_asset", "trades", "volume_asset_buy", "volume_asset_sell", "ignore"], axis=1, inplace=True)
 
-	sc = MinMaxScaler(feature_range=(0, 1))
+	sc = MinMaxScaler(feature_range=(0, 100))
 	candles = sc.fit_transform(candles)
 	joblib.dump(sc, f"./model/crypto_predictor_{opt.symbol}.sc")
 
@@ -49,7 +50,7 @@ if __name__ == "__main__":
 	plt.ion()
 	fig, ax = plt.subplots()
 	fig.canvas.set_window_title("Train")
-	ax.set(xlabel="Epoch", ylabel="MSE")
+	ax.set(xlabel="Epoch", ylabel="RMSE")
 	ax.grid()
 	loss_hl, = ax.plot([], [])
 	fig.tight_layout()
@@ -66,7 +67,7 @@ if __name__ == "__main__":
 			loss.backward()
 			optimizer.step()
 
-			epoch_loss = iterative_avg(epoch_loss, loss.item(), i + 1)
+			epoch_loss = iterative_avg(epoch_loss, math.sqrt(loss.item()), i + 1)
 
 			if (i + 1) % (total_step // 10) == 0:
 				print(f"Epoch [{epoch + 1}/{num_epochs}], Step [{i + 1}/{total_step}], Loss: {epoch_loss:.2f}")

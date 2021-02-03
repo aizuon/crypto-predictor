@@ -23,9 +23,7 @@ if __name__ == "__main__":
 
 	client = Client(opt.key, opt.secret)
 
-	input_seq_length = 50
-	output_seq_length = 1
-	batch_size = input_seq_length + output_seq_length
+	input_seq_length = 10
 
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	model = SequencePredictor().to(device)
@@ -52,12 +50,14 @@ if __name__ == "__main__":
 
 			candles = pd.DataFrame(data, columns=["date_open", "open", "high", "low", "close", "volume", "date_close", "volume_asset", "trades", "volume_asset_buy", "volume_asset_sell", "ignore"])
 			times = candles["date_open"]
-			candles.drop(["date_open", "volume", "date_close", "volume_asset", "trades", "volume_asset_buy", "volume_asset_sell", "ignore"], axis=1, inplace=True)
+			opens = candles["open"]
+			candles.drop(["date_open", "open", "volume", "date_close", "volume_asset", "trades", "volume_asset_buy", "volume_asset_sell", "ignore"], axis=1, inplace=True)
 
 			sc = joblib.load(f"./model/crypto_predictor_{opt.symbol}.sc")
 			
 			candles_eval = sc.transform(candles)
 			candles["date_open"] = times
+			candles["open"] = opens
 
 			with torch.no_grad():
 				input_data = prepare_for_nn_eval(candles_eval).to(device)
@@ -65,14 +65,14 @@ if __name__ == "__main__":
 				output_pred = model(input_data).cpu().numpy()
 				output_pred = sc.inverse_transform(output_pred)[0]
 
-				candles = candles.append({"date_open": candles["date_open"].iloc[-1] + 3600000, "open": output_pred[0], "close": output_pred[1], "high": output_pred[2], "low": output_pred[3]}, ignore_index=True)
+				candles = candles.append({"date_open": candles["date_open"].iloc[-1] + (1000 * 60 * 60), "open": candles["close"].iloc[-1], "high": output_pred[0], "low": output_pred[1], "close": output_pred[2]}, ignore_index=True)
 
 			candles["date_open"] = pd.to_datetime(candles["date_open"], unit="ms")
 			candles["open"] = candles["open"].astype(float)
-			candles["close"] = candles["close"].astype(float)
 			candles["high"] = candles["high"].astype(float)
 			candles["low"] = candles["low"].astype(float)
-			candles.rename(columns={"date_open": "Date", "open": "Open", "close": "Close", "high": "High", "low": "Low"}, inplace=True)
+			candles["close"] = candles["close"].astype(float)
+			candles.rename(columns={"date_open": "Date", "open": "Open", "high": "High", "low": "Low", "close": "Close"}, inplace=True)
 			candles.set_index("Date", inplace=True)
 
 			fig, ax = mpf.plot(candles, type="candle", block=False, returnfig=True)
