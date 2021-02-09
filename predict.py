@@ -23,7 +23,7 @@ if __name__ == "__main__":
 
 	client = Client(opt.key, opt.secret)
 
-	input_seq_length = 10
+	input_seq_length = 20
 
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	model = SequencePredictor().to(device)
@@ -53,9 +53,9 @@ if __name__ == "__main__":
 			opens = candles["open"]
 			candles.drop(["date_open", "open", "volume", "date_close", "volume_asset", "trades", "volume_asset_buy", "volume_asset_sell", "ignore"], axis=1, inplace=True)
 
-			sc = joblib.load(f"./model/crypto_predictor_{opt.symbol}.sc")
+			sc = MinMaxScaler(feature_range=(0, 100))
 			
-			candles_eval = sc.transform(candles)
+			candles_eval = sc.fit_transform(candles)
 			candles["date_open"] = times
 			candles["open"] = opens
 

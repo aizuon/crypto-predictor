@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from sklearn.preprocessing import MinMaxScaler
 
 
 def split_input_output_train(data, count, input_seq_length):
@@ -7,9 +8,13 @@ def split_input_output_train(data, count, input_seq_length):
 	output_data = []
 
 	for i in range(count):
-		b = data[i * (input_seq_length + 1):(i+1) * (input_seq_length + 1)]
+		b = data.iloc[i * (input_seq_length + 1):(i + 1) * (input_seq_length + 1)]
+
+		sc = MinMaxScaler(feature_range=(0, 100))
+		b = sc.fit_transform(b)
+		
 		b_input = b[:input_seq_length]
-		b_output = b[input_seq_length:input_seq_length + 1][0]
+		b_output = b[input_seq_length:input_seq_length + 1]
 
 		input_data.append(b_input)
 		output_data.append(b_output)

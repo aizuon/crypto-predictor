@@ -36,4 +36,7 @@ class SequenceDataset(Dataset):
 		return len(self.__input_data)
 
 	def __getitem__(self, idx):
-		return torch.from_numpy(np.asarray(self.__input_data[idx], dtype=np.float32)), torch.from_numpy(np.asarray(self.__output_data[idx], dtype=np.float32))
+		input = np.asarray(self.__input_data[idx], dtype=np.float32)
+		output = np.asarray(self.__output_data[idx], dtype=np.float32)
+
+		return torch.from_numpy(input), torch.from_numpy(output)

@@ -6,8 +6,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import DataLoader
-from sklearn.preprocessing import MinMaxScaler
-import joblib
 from binance.client import Client
 
 from network import *
@@ -26,7 +24,7 @@ if __name__ == "__main__":
 	model = SequencePredictor().to(device)
 	model.train()
 	loss_fn = nn.MSELoss(reduction="sum")
-	optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+	optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 	count = 300
 	input_seq_length = 10
@@ -34,10 +32,6 @@ if __name__ == "__main__":
 	data = client.get_historical_klines(opt.symbol, Client.KLINE_INTERVAL_1HOUR, f"{((count + 1) * (input_seq_length + 1))} hours ago UTC")
 	candles = pd.DataFrame(data, columns=["date_open", "open", "high", "low", "close", "volume", "date_close", "volume_asset", "trades", "volume_asset_buy", "volume_asset_sell", "ignore"])
 	candles.drop(["date_open", "open", "volume", "date_close", "volume_asset", "trades", "volume_asset_buy", "volume_asset_sell", "ignore"], axis=1, inplace=True)
-
-	sc = MinMaxScaler(feature_range=(0, 100))
-	candles = sc.fit_transform(candles)
-	joblib.dump(sc, f"./model/crypto_predictor_{opt.symbol}.sc")
 
 	input_data, output_data = split_input_output_train(candles, count, input_seq_length)
 
@@ -60,7 +54,7 @@ if __name__ == "__main__":
 			inputs = inputs.to(device)
 			outputs = outputs.to(device)
 
-			outputs_pred = model(inputs)
+			outputs_pred = model(inputs).unsqueeze(0)
 			loss = loss_fn(outputs_pred, outputs)
 
 			optimizer.zero_grad()
